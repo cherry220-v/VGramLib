@@ -22,4 +22,5 @@ def start_watchdog(path, bot):
             bot.getUpdates()
     except KeyboardInterrupt:
         observer.stop()
+        sys.exit(1)
     observer.join()

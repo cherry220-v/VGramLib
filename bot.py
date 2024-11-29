@@ -40,10 +40,22 @@ class BaseUser:
 class BaseChat:
     def __init__(self):
         self.id: int = None
+        self.title: str = None
+        self.description: str = None
+        self.photo: list = None
         self.firstName: str = None
         self.lastName: str = None
         self.username: str = None
         self.type: str = None
+        self.isForum: bool = None
+
+    def fromData(self, data: dict):
+        self.id = data.get("id")
+        self.firstName = data.get("firstName")
+        self.lastName = data.get("lastName")
+        self.username = data.get("username")
+        self.type = data.get("type")
+        self.isForum = data.get("is_forum")
 
 class BaseMessage:
     def __init__(self):
@@ -60,12 +72,7 @@ class BaseMessage:
         self.sender = User()
         self.sender.fromData(data.get("from", {}))
         
-        chat = Chat()
-        chat.id = data.get("chat", {}).get("id")
-        chat.firstName = data.get("chat", {}).get("firstName")
-        chat.lastName = data.get("chat", {}).get("lastName")
-        chat.username = data.get("chat", {}).get("username")
-        chat.type = data.get("chat", {}).get("type")
+        chat = Chat().fromData(data.get("chat", {}))
         
         self.text = data.get("text")
         self.chat = chat
@@ -124,6 +131,7 @@ class Bot(BaseUser):
         response = requests.post(f"https://api.telegram.org/bot{self.token}/getUpdates", data=data).json()
         if response.get("result"):
             tasks = response["result"]
+            print(tasks)
             for task in tasks:
                 update = Update()
                 update.id = task.get("update_id")
@@ -139,8 +147,8 @@ class Bot(BaseUser):
                         self.sendMessage(message.chat.id, f"Неизвестная команда: {command}")
                     self.offset = update.id + 1
 
-    def command(self, name):
-        def wrapper(func):
+    def command(self, name, description):
+        def wrapper(func,):
             self.commands[name] = func
             return func
         return wrapper
@@ -180,11 +188,10 @@ class Bot(BaseUser):
         response = requests.post(f"https://api.telegram.org/bot{self.token}/setDescription").json()
         return response.json().get("ok")
 
-
 bot = Bot()
 bot.token = "7871112958:AAHLVE8nxJAUR987VVTnSXbfg5t93EZ9a0c"
 
-@bot.command(name="start")
+@bot.command(name="start", description="Standart description")
 def startCommand(bot, message: Message):
     print(message.text)
 
