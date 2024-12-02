@@ -6,97 +6,11 @@ logging.getLogger('urllib3').setLevel(logging.WARNING)
 
 from errors import AuthError
 from watch import *
+from base import *
 
 URL = "https://api.telegram.org/bot"
 
-class BaseUser:
-    def __init__(self):
-        self.id: int = None
-        self.isBot: bool = None
-        self.firstName: str = None
-        self.lastName: str = None
-        self.username: str = None
-        self.languageCode: str = None
-        self.isPremium: bool = None
-        self.addedToAttachmentMenu: bool = None
-        self.canJoinGroups: bool = None
-        self.canReadAllGroupMessages: bool = None
-        self.supportsInline_queries: bool = None
-        self.canConnectToBusiness: bool = None
-        self.hasMainWebApp: bool = None
-    
-    def fromData(self, data: dict):
-        self.id = data.get("id")
-        self.isBot = data.get("is_bot")
-        self.firstName = data.get("first_name")
-        self.username = data.get("username")
-        self.canJoinGroups = data.get("can_join_groups")
-        self.canReadAllGroupMessages = data.get("can_read_all_group_messages")
-        self.supportsInline_queries = data.get("supports_inline_queries")
-        self.canConnectToBusiness = data.get("can_connect_to_business")
-        self.hasMainWebApp = data.get("has_main_web_app")
-        return self
-
-class BaseChat:
-    def __init__(self):
-        self.id: int = None
-        self.title: str = None
-        self.description: str = None
-        self.photo: list = None
-        self.firstName: str = None
-        self.lastName: str = None
-        self.username: str = None
-        self.type: str = None
-        self.isForum: bool = None
-
-    def fromData(self, data: dict):
-        self.id = data.get("id")
-        self.firstName = data.get("firstName")
-        self.lastName = data.get("lastName")
-        self.username = data.get("username")
-        self.type = data.get("type")
-        self.isForum = data.get("is_forum")
-
-class BaseMessage:
-    def __init__(self):
-        self.id: int = None
-        self.sender: BaseUser = None
-        self.chat: BaseChat = None
-        self.date: int = None
-        self.text: str = None
-        self.entities: list = None
-
-    def fromData(self, data: dict):
-        self.id = data.get("message_id")
-        
-        self.sender = User()
-        self.sender.fromData(data.get("from", {}))
-        
-        chat = Chat().fromData(data.get("chat", {}))
-        
-        self.text = data.get("text")
-        self.chat = chat
-        return self
-
-class Message(BaseMessage):
-    def __init__(self):
-        super().__init__()
-    def answer(self): pass
-class Update:
-    def __init__(self):
-        self.id: int = None
-        self.message: BaseMessage = None
-
-class User(BaseUser):
-    def __init__(self):
-        super().__init__()
-        self.status: str = None
-
-class Chat(BaseChat):
-    def __init__(self):
-        super().__init__()
-
-class Bot(BaseUser):
+class Bot(User):
     def __init__(self, token: str | None = None):
         super().__init__()
         self.token = token
@@ -122,7 +36,7 @@ class Bot(BaseUser):
         response = requests.post(f"https://api.telegram.org/bot{self.token}/getMe")
         data = response.json()
         if data.get("result") and response.json().get("ok"):
-            self.fromData(data.get("result"))
+            self = self.obj(Bot, data.get("result"))
         return response.json().get("ok")
 
     def getUpdates(self):
@@ -131,21 +45,20 @@ class Bot(BaseUser):
         response = requests.post(f"https://api.telegram.org/bot{self.token}/getUpdates", data=data).json()
         if response.get("result"):
             tasks = response["result"]
-            print(tasks)
             for task in tasks:
-                update = Update()
-                update.id = task.get("update_id")
-                message = Message()
-                message.fromData(task.get("message"))
-                update.message = message
-
-                if message.text.startswith('/'):
-                    command = message.text.split(' ')[0][1:]
-                    if command in self.commands:
-                        self.commands[command](self, message)
-                    else:
-                        self.sendMessage(message.chat.id, f"Неизвестная команда: {command}")
-                    self.offset = update.id + 1
+                update: Update = self.obj(Update, task)
+                update.message = self.obj(Message, task.get("message"))
+                update.message.chat = self.obj(Chat, task.get("message").get("chat"))
+                update.message.sender = self.obj(Chat, task.get("message").get("from"))
+                if update.message.entities:
+                    for entity in update.message.entities:
+                        if entity.get("type") == "bot_command":
+                            command = update.message.text.split(' ')[0][1:]
+                            if command in self.commands:
+                                self.commands[command](self, update.message)
+                            else:
+                                self.sendMessage(update.message.chat.id, f"Неизвестная команда: {command}")
+                self.offset = update.id + 1
 
     def command(self, name, description):
         def wrapper(func,):
@@ -192,7 +105,12 @@ bot = Bot()
 bot.token = "7871112958:AAHLVE8nxJAUR987VVTnSXbfg5t93EZ9a0c"
 
 @bot.command(name="start", description="Standart description")
-def startCommand(bot, message: Message):
-    print(message.text)
+def startCommand(bot: Bot, message: Message):
+    bot.sendMessage(message.chat.id, message.text)
+
+def anotherStartCommand(bot: Bot, message: Message):
+    bot.sendMessage(message.chat.id, str(message.chat.id))
+
+bot.addCommand(anotherStartCommand, "chat")
 
 bot.run(debug=True)
